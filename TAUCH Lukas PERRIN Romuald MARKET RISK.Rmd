@@ -1,0 +1,1147 @@
+---
+title: "Market Risk Project"
+author: "Lukas TAUCH & Romuald PERRIN"
+date: "2022 - 2023"
+output: 
+ rmdformats::readthedown:
+     highlight: kate
+editor_options: 
+  markdown: 
+    wrap: 72
+---
+
+-   windows : read. Xlsx
+-   mac : read_xlsx
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+![](images/Capture d’écran 2022-12-28 à 16.07.30.png)
+
+# Question A `Ex2 Q1 TD1`
+
+> From the time series of the daily prices of the stock Natixis between
+> January 2015 and December 2016, provided with TD1, estimate a
+> historical VaR on price returns at a one-day horizon for a given
+> probability level (this probability is a parameter which must be
+> changed easily). You must base your VaR on a non-parametric
+> distribution (Epanechnikov Kernel).
+
+Estimate historical VaR with non-parrametric distribution (Epanechinikov
+Kernel)
+
+## Import Data
+
+First, we import the necessary libraries and read in the data.
+
+```{r}
+# import necessary libraries
+#library(xlsx)
+library(readxl)
+# read in data
+#df <- read.xlsx("Natixis stock.xlsx", 1)
+df <- read_excel("Natixis stock.xlsx")
+#df
+data <- df[1:513,]
+head(data)
+```
+
+## Calcul Returns
+
+After, we calculate the price returns for each day by subtracting the
+previous day's price from the current day's price.
+
+```{r}
+# calculate price return 
+returns <- c()
+
+for (i in 2:length(data$Price) )
+{
+  returns[i] <-  (data$Price[i] - data$Price[i-1]) / data$Price[i]
+}
+returns [1] <- 0
+#returns
+```
+
+## Sort Returns
+
+We sort the price returns in ascending order.
+
+```{r}
+# function sort returns in ascending order
+bubble_sort <- function(vec) 
+{
+  # Boucle sur chaque élément du vecteur
+  for (i in 1:(length(vec) - 1)) 
+    {
+    # Boucle sur chaque élément suivant l'élément actuel
+    for (j in (i + 1):length(vec)) 
+      {
+      # Si l'élément actuel est supérieur à l'élément suivant, les échanger de place
+      if (vec[i] > vec[j]) 
+        {
+        temp <- vec[i]
+        vec[i] <- vec[j]
+        vec[j] <- temp
+      }
+    }
+  }
+  return(vec)
+}
+
+sorted_returns <- bubble_sort(returns)
+#sorted_returns
+```
+
+## Calcul Number observation
+
+We calculate the number of observations (n) in the sample using the
+length() function.
+
+```{r}
+# calculate number of observations
+n <- length(returns)
+```
+
+## Calcul bandwidth Epanechnikov Kernel
+
+We calculate the **bandwidth (h)** using the **Epanechnikov Kernel
+formula** : $h = \frac{4}{3*n}^{\frac{1}{5}*s}$, where s is the sample
+standard deviation of the price returns.
+
+```{r}
+# Function which calculate the standard deviation 
+
+# First we need to understand what is standard deviation so it's a measure of the dispersion of the values of a vector around its mean. 
+# It is calculated by first taking the mean of the vector, then calculating the deviation of each element of the vector from the mean, squaring it and accumulating it. 
+# The variance is obtained by dividing the sum of the squares of the deviations by the number of elements in the vector, and the standard deviation is obtained by taking the square root of the variance.
+
+std_dev <- function(vec) 
+{
+  # Calculer la moyenne du vecteur
+  mean <- sum(vec) / length(vec)
+  
+  # Initialiser la somme des carrés des écarts à 0
+  sum_sq_diff <- 0
+  
+  # Boucler sur chaque élément du vecteur
+  for (x in vec) 
+  {
+    # Ajouter le carré de l'écart de l'élément à la moyenne à la somme des carrés des écarts
+    sum_sq_diff <- sum_sq_diff + (x - mean)^2
+  }
+  
+  # Calculer la variance en divisant la somme des carrés des écarts par le nombre d'éléments dans le vecteur
+  variance <- sum_sq_diff / length(vec)
+  
+  # Calculer la déviation standard en prenant la racine carrée de la variance
+  std_dev <- sqrt(variance)
+  return(std_dev)
+}
+
+std_returns <- std_dev(sorted_returns)
+#std_returns
+
+
+# calculate bandwidth
+h <- (4/(3*n))^(1/5) * std_returns
+#h
+```
+
+## Calcul weights Epanechnikov Kernel
+
+We calculate the **weights (w)** for each observation using the
+**Epanechnikov Kernel formula** : $w = (1 - (x/h)^2) * (3/4)$, where x
+is the price return for each observation.
+
+```{r}
+# calculate weights
+weights <- (1 - (sorted_returns/h)^2) * (3/4)
+#weights
+```
+
+## Cumulative Sum
+
+We calculate the cumulative sum (cs) of the weights for each
+observation.
+
+```{r}
+cumulative_sum <- function(vec) 
+{
+  result <- numeric(length(vec))
+  result[1] <- vec[1]
+  for (i in 2:length(vec)) 
+  {
+    result[i] <- result[i-1] + vec[i]
+  }
+  return(result)
+}
+
+# calculate cumulative sum of weights
+cs <- cumulative_sum(weights)
+#cs
+```
+
+## Find Weight at a specific percentile
+
+We find the weight (w) corresponding to the probability level that you
+want to use for your VaR. We want to calculate the historical VaR at a
+probability level of **95%**, you would find the weight corresponding to
+the **95th percentile** and then find the **price return** corresponding
+to that **weight**. The **resulting price return** would be the **VaR**
+at a **one-day horizon** for a **95% probability level**.
+
+```{r}
+# find weight corresponding to desired probability level so the xth percentile and find the price return corresponding to that weight.
+
+findQuantile <- function(vector, quantile) 
+{
+  sortedVector <- bubble_sort(vector)
+  index <- round((quantile * length(vector)) - 1)
+  sortedVector[index]
+}
+
+weight <- findQuantile(cs,0.95)
+#weight
+
+findindex <- function(vector, index) 
+{
+  for (x in 1:length(vector))
+  {
+    if (vector[x] == index)
+    {
+      return (x)
+    }
+  }
+}
+
+sorted_cs <- bubble_sort(cs)
+#sorted_cs
+
+index_weight <- findindex(sorted_cs,weight)
+#index_weight
+```
+
+## Return the price return of this weight
+
+We find the price return (x) corresponding to the weight (w) found.
+
+```{r}
+# find price return corresponding to weight
+price_return <- sorted_returns[index_weight]
+#price_return
+```
+
+## Calcul VaR
+
+Finaly we have the VaR $VaR^{h}_{\alpha} = X$ here
+$VaR^{1}_{0.95} = 3,59 %$ so we can read **5%** to **lose more** than
+**3.59%** of their portfolio in **1 day** or **95%** to **lose at most**
+**3.59%** of their portfolio in **1 day**.
+
+```{r}
+# calculate VaR
+VaR <- price_return * 100
+VaR
+
+# We can improve the calculation of the VaR by multiplying it by the amount invested
+# VaR <- price_return *  investment_amount
+```
+
+If we don't sort the cs to find the index
+
+```{r}
+index_weight2 <- findindex(cs,weight)
+#index_weight2
+price_return2 <- sorted_returns[index_weight2]
+VaR3 <- price_return2 * -100
+VaR3
+```
+
+## With methods Not Allowed
+
+```{r, message=FALSE, warning=FALSE}
+# import necessary libraries
+library(readxl)
+
+library(TSstudio)
+library(tseries)
+library(PerformanceAnalytics)
+library(sparsevar)
+
+# read in data
+data2 <- read_excel("Natixis stock.xlsx",1)
+# <- read.xlsx("Natixis stock.xlsx", 1)
+#data2
+
+prices <- ts(data2$Price, start = c(2015,1), end=c(2016,12), frequency=252)
+#ts_plot(prices)
+
+return <- c()
+
+for (i in 2:length(prices) )
+{
+  return[i] <-  (prices[i] - prices[i-1]) / prices[i]
+}
+return [1] = 0
+#return
+
+
+VaR2 <- VaR(return, p=0.95, kernel="epanechnikov") * -100
+VaR2
+```
+
+## Another method to calculate VaR with CDF 
+
+```{r}
+# Take the first 513 values
+rend <- returns
+
+# Calculate the standard deviation
+std <- std_returns
+
+# Calculate h
+h <- 1.06 * std * (513^(-1/5))
+
+# Define the function K
+K <- function(x) {
+  return ((1/4) * (2 + 3 * x - x^3))
+}
+
+# Define the function F
+F <- function(x, rend) {
+  h <- 1.06 * std * (513 ^(-1/5))
+  somme <- 0
+  for (i in 1:length(rend)) {
+    u <- (x - rend[i])/h
+    if ((u < 1) && (u > -1)) {
+      somme <- somme + K(u)
+    }
+  }
+  return (somme/length(rend))
+}
+
+# Define the function dichotomie
+dichotomie <- function(rend, alpha) {
+  a <- -1
+  b <- 1
+  while (b - a) {
+    m <- (a + b)/2
+    print(paste("m = ", m))
+    if (round(F(m, rend), 3) == 1 - alpha) {
+      return (m)
+    } else if (round(F(m, rend), 3) < 1 - alpha) {
+      b <- m
+    } else {
+      a <- m
+    }
+  }
+  return (m)
+}
+
+# Test the function dichotomie
+#x <- dichotomie(rend, 0.95)
+#print(x)
+#print(F(x, rend))
+```
+
+With this method **x**, returns us the **VaR* which after running the 1 hour this code, we find **VaR = 3.43%** and **F(x,rend)** returns the **ES** which is **5.33%**. 
+
+We conclude that even with 4 VaR calculated differently, we return a **fairly close VaR** but above all an **ES that are the same**.
+
+# Question B `Ex2 Q5 & Q6 TD2`
+
+## a) Calculate ES
+
+> Calculate the expected shortfall for the VaR calculated in question A.
+> How is the result, compared to the VaR?
+
+```{r}
+# Calculate the expected shortfall (ES) by first finding the returns that fall below the VaR threshold
+losses <- sorted_returns[sorted_returns <= (VaR/-100) ]
+#losses
+
+#calculate the average of the losses:
+ES <- mean(losses)
+#ES
+
+ES_percentage <- ES * -100
+ES_percentage
+```
+
+The expected shortfall is a measure of the **expected loss** in the
+event that the VaR is **exceeded**. It is typically used as a more
+**conservative estimate** of risk compared to the VaR. In this case, the
+expected shortfall represents the expected loss in the event that the
+VaR is exceeded, which is likely to be **higher** than the VaR itself.
+
+ES with the other VaR
+
+```{r}
+# Calculate the expected shortfall (ES) by first finding the returns that fall below the VaR threshold
+losses2 <- sorted_returns[sorted_returns <= (VaR2[1]/-100) ]
+#losses
+
+#calculate the average of the losses:
+ES2 <- mean(losses)
+#ES2
+
+ES_percentage2 <- ES2 * -100
+ES_percentage2
+```
+
+We have the same ES.
+
+## b) Calculate volatility
+
+> Calculate the volatility, as well as the upper and lower
+> semi-deviations for the Natixis stock for each of the four years in
+> your dataset. What can you conclude about the riskiness of each of
+> these years for this stock?
+
+```{r message=FALSE, warning=FALSE}
+library(magrittr)
+library(dplyr)
+
+# Convert the date column to a date object
+
+
+df$Date <- as.Date(df$Date, format = "%d/%m/%Y")
+
+# Add a column with the year of each observation
+df$year <- format(df$Date, "%Y")
+
+# Split the data frame into a list of data frames by year
+df_list <- split(df, df$year)
+
+# Initialize an empty data frame to store the results
+df_stats <- data.frame(year=character(), volatility=numeric(), upper_semi_deviation=numeric(), lower_semi_deviation=numeric())
+```
+
+```{r}
+# Iterate over the list of data frames
+for(i in 1:length(df_list)) 
+{
+  # Extract the data frame for the current year
+  df_year <- df_list[[i]]
+  
+  year_returns <- c()
+
+  for (i in 2:length(df_year$Price) )
+  {
+    year_returns[i] <-  (df_year$Price[i] - df_year$Price[i-1]) / df_year$Price[i]
+  }
+  year_returns [1] <- 0
+  #year_returns
+  
+  # Calculate the volatility, upper semi-deviation, and lower semi-deviation for the current year
+  volatility <- std_dev(year_returns)
+  upper_semi_deviation <-  findQuantile(year_returns, 0.75)          
+  lower_semi_deviation <- findQuantile(year_returns, 0.25)
+  
+  # Add a row to the results data frame with the statistics for the current year
+   df_stats <- rbind(df_stats, data.frame(year= df_year, volatility=volatility, upper_semi_deviation=upper_semi_deviation, lower_semi_deviation=lower_semi_deviation))
+}
+
+#df_stats
+head(df_stats, n = 2)
+print(df_stats[259:260,])
+print(df_stats[514:515,])
+print(df_stats[769:770,])
+
+```
+
+The volatility of a stock is a **measure of the fluctuations** in its
+price. A higher **volatility indicates a higher level of risk**, as the
+stock price is more likely to fluctuate significantly.
+
+The upper and lower semi-deviations are **measures of the dispersion**
+of the returns around the median. A higher semi-deviation indicates a
+higher level of risk, as the returns are more **spread out**.
+
+By examining the values of the volatility and semi-deviations for each
+year, we can conclude about the **riskiness** of each year for the
+Natixis stock. For example, if one year has a higher volatility and/or
+semi-deviations compared to the other years, it could be considered more
+risky.
+
+# Question C `Ex2 Q3 & Q4 TD3`
+
+> With the dataset provided for TD1 on Natixis prices, first calculate
+> daily returns. You will then analyse these returns using a specific
+> method in the field of the **EVT**.
+
+## a) Determine extremal index
+
+> Determine the extremal index using the block or run de-clustering, for
+> the two tails of the distributions
+
+```{r}
+# Calculate the daily price returns
+all_returns <- c()
+
+for (i in 2:length(df$Price) )
+{
+  all_returns[i] <-  (df$Price[i] - df$Price[i-1]) / df$Price[i]
+}
+all_returns [1] <- 0
+#all_returns
+```
+
+```{r}
+# Function to calculate empirical CDF
+empirical_cdf <- function(x) 
+{
+  # Sort the vector in ascending order
+  sorted_x <- bubble_sort(x)
+  # Calculate the number of elements in the vector
+  n <- length(x)
+  # Calculate the empirical CDF by looping through the sorted vector and computing the cumulative sum
+  empirical_cdf <- rep(0, n)
+  for (i in 1:n) {
+    empirical_cdf[i] <- sum(sorted_x <= sorted_x[i]) / n
+  }
+  return(empirical_cdf)
+}
+
+# Calculate the empirical CDF of the returns
+#cdf <- ecdf(all_returns)
+cdf<- empirical_cdf(all_returns)
+#cdf
+```
+
+```{r message=FALSE, warning=FALSE}
+# Function to calculate ranks
+calcul_ranks <- function(x) 
+{
+  # Sort the vector in ascending order
+  sorted_x <- bubble_sort(x)
+  # Calculate the ranks by looping through the sorted vector and assigning ranks to each element
+  ranks <- rep(0, length(x))
+  for (i in 1:length(x)) {
+    ranks[i] <- which(sorted_x == x[i])
+  }
+  return(ranks)
+}
+
+ranks <- calcul_ranks(all_returns)
+#ranks
+```
+
+```{r}
+# Sort the returns in ascending order
+returns_sorted <- bubble_sort(all_returns)
+```
+
+```{r}
+# Split the returns into two groups, one for the upper tail and one for the lower tail
+
+returns_upper <- returns_sorted[ranks > length(all_returns)/2]
+returns_lower <- returns_sorted[ranks <= length(all_returns)/2]
+```
+
+```{r}
+# Calculate the cumulative sum of the returns for each group
+cum_sum_upper <- cumulative_sum(returns_upper)
+cum_sum_lower <- cumulative_sum(returns_lower)
+```
+
+```{r}
+# Calculate the number of observations in each group
+n_upper <- length(returns_upper)
+n_lower <- length(returns_lower)
+```
+
+```{r}
+# Calculate the mean of the cumulative sum for each group
+mean_cum_sum_upper <- mean(cum_sum_upper)
+mean_cum_sum_lower <- mean(cum_sum_lower)
+```
+
+```{r}
+# Calculate the extremal index for the upper tail using the block de-clustering method
+extremal_index_upper <- (mean_cum_sum_upper / (n_upper * std_dev(returns_upper)))*-1
+
+# Calculate the extremal index for the lower tail using the block de-clustering method
+extremal_index_lower <- (mean_cum_sum_lower / (n_lower * std_dev(returns_lower)))*-1
+
+extremal_index_upper
+extremal_index_lower
+```
+
+The **extremal index** is a measure of the presence of **extreme
+events** in the data. It is a number **between 0 and 1**, with values
+closer to **1 indicating a higher frequency of extreme events**.
+
+The block or run de-clustering method involves **dividing the data into
+clusters** or **runs of observations**, and estimating the extremal
+index based on the proportion of clusters or runs with extreme
+observations.
+
+By examining the extremalIndex element of the returned list, we can
+determine the **extremal index** of the Natixis stock returns here near
+to **0 so don't have a higher frequency of extreme events**.
+
+## b) Adaptation of the EVT VaR
+
+> Propose an adaptation of the EVT VaR which takes into account the
+> dependence of the returns.
+
+We calculate the **empirical copula** of the returns using a **copula
+function**, such as the Gaussian copula or the Clayton copula. The
+**copula** allows us to model the **dependence structure** between the
+**returns**, regardless of their **marginal distributions**.
+
+Moreover, we use the copula to transform the returns into a **set of
+uniform random variables** using the **copula inverse function**.
+
+We calculate the **quantiles** of the transformed returns using the
+**Generalized Extreme Value (GEV) distribution**, which is a common
+distribution used in EVT. The GEV distribution can be fitted to the data
+using the **method of maximum likelihood**. The **quantiles** represent
+the **VaR** at different confidence levels.
+
+Finally, we transform the **quantiles back** to the original scale using
+the **copula function**. This will give us **the VaR of the returns**
+taking into account their **dependence structure**.
+
+```{r}
+# Returns
+# all_returns
+
+# Number of returns
+n <- length(all_returns)
+
+# Calculate empirical copula of returns using Gaussian copula
+copula <- function(u1, u2) 
+{
+  sqrt((2 * pi)^(-1)) * exp(-((u1 - u2)^2)/2)
+}
+
+# Transform returns into uniform random variables using copula inverse function
+u <- matrix(nrow = n, ncol = n)
+for (i in 1:n) {
+  for (j in 1:n) {
+    u[i, j] <- copula(returns[i], returns[j])
+  }
+}
+
+# Calculate quantiles of transformed returns using GEV distribution
+fit <- function(x) 
+{
+  -log(-log(x))
+}
+
+
+quantiles <- apply(u, 2, fit)
+
+# Transform quantiles back to original scale using copula function
+var <- copula(quantiles[1], quantiles[2])
+
+print(paste("VaR at 95% confidence level:", var))
+```
+
+The **copula-based EVT VaR model** is just one way to adapt the **EVT
+VaR model** to take into account the **dependence of the returns**.
+
+# Question D `Ex2 Q3 & Q4 TD4`
+
+## a) Parametersof Almgren and Chriss
+
+> Estimate all the parameters of the model of Almgren and Chriss. Is
+> this model well specified?
+
+First we load the data
+
+```{r}
+library(readxl)
+portfolio <- read_excel("Dataset TD4.xlsx")
+
+
+colnames(portfolio)<-c("Date","Bid-Ask Spread","Volume","Sign", "Price", "Diff")
+str(portfolio)
+```
+
+**data processing**
+
+```{r}
+for(i in 1:length(portfolio$Volume))
+{
+  portfolio$Volume[portfolio$Volume == ""] <- NA
+  portfolio$Volume <- as.numeric(portfolio$Volume)
+}
+#portfolio
+```
+
+```{r}
+length_portfolio <- length(portfolio$Volume) - 2
+for (i in 1:length_portfolio)
+{
+  if(!is.na(portfolio$Volume[i]) == TRUE & portfolio$Volume[i]!=0) ## On met des 0 sur les deux lignes après les volumes pour pouvoir supprimer les NA
+  {
+    if(is.na(portfolio$Volume[i+1]) == TRUE) #Boucle pour ne pas renplacer des volumes qui se suivent par des 0
+    {
+      portfolio$Volume[i+1] = 0
+    }
+    if(is.na(portfolio$Volume[i+2])==TRUE)
+    {
+      portfolio$Volume[i+2] = 0
+    }
+  }
+
+}
+
+portfolio <- portfolio[!is.na(portfolio$Volume),]
+#portfolio
+```
+
+Now we need to calculate the model of **Almgren and Chriss**.
+
+So
+$$h(n_{N}/t_{N}) - \varepsilon_{N}*signe(n_{N}) = \mu * n_{N} / t_{N} + E$$
+
+It's like a **regression linear** with **Y = intercept + aX**
+
+with $h(n_{N}/t_{N})$ -\> **transient impact** and we know that :
+
+**permanent impact + transient impact** = $P_{t+1} - P_{t}$ and
+**permanent impact** = $P_{t+2} - P_{t+1}$ So **transient impact** =
+$P_{t+1} - P_{t+2}$
+
+**Transition time** = **T+1 - T** (T for transaction date) **Volumes**
+-\> All our Volumes that we know **Epsilon \* Sign** -\> **BidAskSpread
+/2 \* Sign Transaction**
+
+So first the **transient impact**
+
+```{r}
+transientimpact <- c()
+times <- c()
+for (i in 1:(length(portfolio$Volume) - 2))
+{
+  if(portfolio$Volume[i]!=0)
+  {
+    TI <- portfolio$Price[i+1]-portfolio$Price[i+2]
+    transientimpact <- append(transientimpact, TI)
+    times <- append(times, portfolio$Date[i+2]-portfolio$Date[i+1])
+  }
+}
+print(transientimpact)
+```
+
+Now we calculate the matrix **Y** :
+
+```{r}
+portfolio_Volume_know <- portfolio[portfolio$Volume!=0,]
+#portfolio_Volume_know
+```
+
+```{r}
+Y<- c()
+
+for (i in 1:(length(portfolio_Volume_know$Volume)-1))
+{
+  Y <- append(Y, transientimpact[i]-(portfolio_Volume_know$'Bid-Ask Spread'[i]/2)*portfolio_Volume_know$Sign[i])
+}
+Y
+```
+
+Now we calculate **X** :
+
+```{r}
+#On calcule X :
+
+X<- c()
+for (i in 1:(length(portfolio_Volume_know$Volume)-1))
+{
+  temp <- portfolio_Volume_know$Volume[i]/times[i]
+  X <- append(X, temp)
+}
+print(X)
+```
+
+Now we can **estimate all the parameters of the model**
+
+```{r}
+parameters <- lm(Y~X)
+summary(parameters)
+```
+
+So we find $\mu$ = **-5.660e-09** and **intercept** = 5.281e-03.
+Moreover, the coefficient is **signifiant** because **pvalue \> 0.05**
+but we have **Ajusted R²** \~ 0 so the model is **not signifiant**.
+
+To conclude **Y = 5.281e-03 + -5.660e-09 X**.
+
+## b) What is your liquidation strategy
+
+> In the framework of Almgren and Chriss, what is your liquidation
+> strategy (we recall that you can only make transactions once every
+> hour).
+
+We want to estimate **sigma (volatility)**:
+
+$$volatility = \frac{1}{n} * \sum_{i = 0}^{n}(r_{i}-rbar)^{2}$$ with **r
+= yield**
+
+To adjust the time problem, we choose an interval of **10 sec**. We go
+through the data and every 10 seconds and we calculate the **yield**.
+
+```{r}
+intervals <- 1/24/60
+intervals # represents 1 min in the array
+```
+
+We calculate the **times** between **each price**:
+
+```{r}
+portfolio_Time <- portfolio_Volume_know
+portfolio_Time$Date[1] <- portfolio_Volume_know$Date[1]
+for (i in 2:length(portfolio_Volume_know$Date))
+{
+  portfolio_Time$Date[i] <- portfolio_Time$Date[i]-portfolio_Volume_know$Date[i-1]
+}
+#portfolio_Time
+```
+
+So we have the **time steps between each price**, we will be able to
+make **returns every 10 seconds**:
+
+```{r}
+return <- c()
+time <- portfolio_Time$Date[1]
+for (j in 2: (length(portfolio_Volume_know$Date)-1))
+{
+  if(time < intervals)
+  {
+    time <- time + portfolio_Time$Date[j]
+  }
+  else
+  {
+    return <- append(return, (portfolio_Time$Price[j+1]/portfolio_Time$Price[j])-1)
+    time <- portfolio_Time$Date[j]
+  }
+}
+return
+```
+
+We can calculate the **volatility** $\sigma^{2}$ :
+
+```{r}
+mean_return <- mean(return)
+
+sum <- 0
+for (i in 1:length(return))
+{
+  sum <- sum + (return[i] - mean_return)^2
+}
+
+volati <- sum / (length(return)-1)
+
+sqrt(volati)
+```
+
+We find an estimator of $\sigma$ = **0.00207923**.
+
+We will now test if the model is **well specified** with **Student** for
+significance
+
+```{r}
+#Calculation of the T statistic under the H0 hypothesis: "n = 0"
+Tn <- -5.660e-09 / sqrt(volati/length(return))
+Tn
+```
+
+**Student** test is a **bilateral test**
+
+**Ho :** absence of **overall significance** of the variables (at least
+one variable is not significantly different from 0) We have a **Tn \<
+t(0.05, 122)** so we can **reject HO** at the risk of **5%**. We can say
+that **n** is significantly different from **0** at the **5% risk**.
+
+Now **bera slang** test for the **normality of errors**
+
+**Ho:** errors follow a normal law **H1:** errors do not follow a normal
+law
+
+We characterize the **normal distribution** $N(m,\sigma^{2})$ by the
+fact 1. that it is symmetric its central moment of **order 3** is zero
+$\mu_{3} = 0$ 2. that its central moment of order 4 is
+$\mu_{4} = 3\mu_{2}^{2} = 3(\sigma^{2})^{2}$ therefore its **Kurtosys**
+$K = \mu_{4} = \sigma^{4} = 3$
+
+```{r}
+sum_error_square <- 0
+for (i in length(portfolio_Volume_know$Date)-1)
+{
+  sum_error_square <- sum_error_square + (parameters$residuals[i])^2
+}
+```
+
+```{r}
+s2 <- sum_error_square / (length(portfolio_Volume_know)-2)
+
+a3hat <- (sum_error_square/(length(portfolio_Volume_know$Date)-1))/(s2^(3/2))
+
+t <- sqrt((length(portfolio_Volume_know$Date)-1)/6)*a3hat
+t
+```
+
+So we can say **Ho** is respected because **3.7 \~ 3** and we can se a
+**normal distribution** if we plot **residuals**.
+
+```{r}
+plot(density(parameters$residuals))
+```
+
+Calculation of $x_{k}$ :
+
+```{r}
+xk <- as.vector(rep(0,24))
+K <- sqrt(0.01*volati^2 /abs(parameters$coefficients[[2]]))
+for (i in 1:24)
+{
+  xk[i] <- (sinh(K*(24 - (i - 1/2*1/24)))/sinh(K*24))*100
+}
+xk
+```
+
+So we solved the **optimization** problem and we have find the **optimal
+strategy of liquidation** : $x_{k}$ We can plot the optimal strategy
+(x1,...,xn) in function of (t1,...,tn) for different portfolio X. Like
+when X is small, medium or large.
+
+# Question E `Q2 & Q3  TD5`
+
+> With the dataset provided for TD5.
+
+## a) determine the multiresolution
+
+```{r}
+df2 = read.csv("Dataset-TD5.csv")
+str(df2)
+```
+
+> With Haar wavelets and the dataset provided with this tutorial,
+> determine the multiresolution correlation between all the pairs of FX
+> rates, using GBPEUR, SEKEUR, and CADEUR (work with the average between
+> the highest and the lowest price and transform this average price in
+> returns on the smallest time step). Do you observe an Epps effect and
+> how could you explain this?
+
+Load data with csv modified
+
+```{r}
+library(readr)
+
+Dataset_TD5 <- read_delim("Dataset TD5mod.csv", delim = ";", escape_double = FALSE, col_types = cols(GbpeurDate = col_datetime(format = "%m/%d/%Y %H:%M")), trim_ws = TRUE)
+str(Dataset_TD5)
+```
+
+To check for the Epps effect, we can plot the correlations between pairs
+of FX rates as a function of time, and look for any patterns or trends
+in the data.
+
+```{r}
+
+#Compute average between the highest & lowest prices 
+gbpeurAverage <- (Dataset_TD5$GbpeurHIGH + Dataset_TD5$GbpeurLOW) / 2
+cadeurAverage <- (Dataset_TD5$CadeurHIGH + Dataset_TD5$SekeurLOW) / 2
+sekeurAverage <- (Dataset_TD5$SekeurHIGH + Dataset_TD5$SekeurLOW) / 2
+
+# Transform the average prices into returns on the smallest time step
+gbpeurReturns <- diff(gbpeurAverage)
+cadeurReturns <- diff(cadeurAverage)
+sekeurReturns <- diff(sekeurAverage)
+
+
+# Initialize the wavelet coefficient matrices
+gbpeurCoeffs <- matrix(nrow = length(gbpeurReturns), ncol = 1)
+cadeurCoeffs <- matrix(nrow = length(cadeurReturns), ncol = 1)
+sekeurCoeffs <- matrix(nrow = length(sekeurReturns), ncol = 1)
+
+# Initial wavelet coefficient for each FX rate for the first return
+sekeurCoeffs[1,1] <- sekeurReturns[1]
+cadeurCoeffs[1,1] <- cadeurReturns[1]
+gbpeurCoeffs[1,1] <- gbpeurReturns[1]
+
+
+# Perform the Haar wavelet 
+for (i in 2:length(gbpeurReturns)) 
+{
+  gbpeurCoeffs[i,1] <- (gbpeurReturns[i] + gbpeurReturns[i-1]) / sqrt(2)
+}
+for (i in 2:length(sekeurReturns)) 
+{
+  sekeurCoeffs[i,1] <- (sekeurReturns[i] + sekeurReturns[i-1]) / sqrt(2)
+}
+for (i in 2:length(cadeurReturns))
+{
+  cadeurCoeffs[i,1] <- (cadeurReturns[i] + cadeurReturns[i-1]) / sqrt(2)
+}
+
+# Calculate the correlation between the two time series for each time period considered
+vectCorrGbpeurSekeur <- rep(0, length(gbpeurCoeffs[, 1]))
+for (i in 1:length(gbpeurCoeffs[ , 1])) {
+  vectCorrGbpeurSekeur[i] <- cor(gbpeurCoeffs[1:i , 1], sekeurCoeffs[1:i, 1])
+}
+
+vectCorrSekeurCadeur <- rep(0, length(gbpeurCoeffs[, 1]))
+for (i in 1:length(gbpeurCoeffs[ , 1])) {
+  vectCorrSekeurCadeur[i] <- cor(sekeurCoeffs[1:i , 1], cadeurCoeffs[1:i, 1])
+}
+
+vectCorrGbpeurCadeur <- rep(0, length(gbpeurCoeffs[, 1]))
+for (i in 1:length(gbpeurCoeffs[ , 1])) {
+  vectCorrGbpeurCadeur[i] <- cor(gbpeurCoeffs[1:i , 1], cadeurCoeffs[1:i, 1])
+}
+
+
+# Plot the correlation versus time
+plot( vectCorrGbpeurSekeur, type = "l", xlab = "Time", ylab = "Correlation (Gbpeur/Sekeur)" ) 
+plot( vectCorrSekeurCadeur, type = "l", xlab = "Time", ylab = "Correlation (Sekeur/Cadeur)" ) 
+plot( vectCorrGbpeurCadeur, type = "l", xlab = "Time", ylab = "Correlation (Gbpeur/Cadeur)" ) 
+
+```
+
+The **Epps** effect refers to the observation that the correlations
+between financial time series tend to **decrease** as the time horizon
+increases. So fx rate **are increasingly uncorrelated** as the time
+horizon increases. This could be due to the fact that different
+instruments are influenced by different underlying factors and drivers,
+and these influences may become more distinct over longer time horizons.
+
+## b) Hurst exponent
+
+> Calculate the Hurst exponent of GBPEUR, SEKEUR, and CADEUR. Determine
+> their annualized volatility using the daily volatility and Hurst
+> exponents.
+
+**Data processing**
+
+```{r message=FALSE, warning=FALSE}
+df2 <- transform(df2 , X.1 = as.numeric(X.1))
+df2 <- transform(df2 , X.2 = as.numeric(X.2))
+df2 <- transform(df2 , X.5 = as.numeric(X.5))
+df2 <- transform(df2 , X.6 = as.numeric(X.6))
+df2 <- transform(df2 , X.9 = as.numeric(X.9))
+df2 <- transform(df2 , X.10 = as.numeric(X.10))
+df2[is.na(df2)] <- 0
+str(df2)
+```
+
+```{r}
+X <- c()
+X1 <- c()
+X2 <- c()
+X <- (df2$X.1 + df2$X.2) / 2
+X1 <- (df2$X.5 + df2$X.6) / 2
+X2 <- (df2$X.9 + df2$X.10) / 2
+
+df3 <- data.frame(X,X1,X2)
+str(df3)
+```
+
+**Function which calculation M2**
+
+```{r}
+# N the step here every 15 minutes so it's 1
+T = 12931
+M2 = 0
+M22 = 0
+M23 = 0
+for (i in 4:T)
+{
+  M2 = M2 + abs(X[i] - X[i-1])^2
+  M22 = M22 + abs(X1[i] - X1[i-1])^2
+  M23 = M23 + abs(X2[i] - X2[i-1])^2
+}
+M2 <- M2/T
+M22 <- M22/T
+M23 <- M23/T
+M2
+M22
+M23
+```
+
+**Function which calculation M2Prime**
+
+```{r}
+M2Prime = 0
+M22Prime = 0
+M23Prime = 0
+T2 <- T/2
+for (i in 4:T2)
+{
+   M2Prime = M2Prime + abs(X[2*i] - X[2*(i-1)])^2
+   M22Prime = M22Prime + abs(X1[2*i] - X1[2*(i-1)])^2
+   M23Prime = M23Prime + abs(X2[2*i] - X2[2*(i-1)])^2
+}
+M2Prime <- (2*M2Prime)/T
+M22Prime <- (2*M22Prime)/T
+M23Prime <- (2*M23Prime)/T
+M2Prime
+M22Prime
+M23Prime
+```
+
+Now we can calculate the **Hurst exponents** for the 3 pairs **GBPEUR,
+SEKEUR, and CADEUR**
+
+```{r}
+H1 <- (1/2) * log2(M2Prime/M2)
+H2 <- (1/2) * log2(M22Prime/M22)
+H3 <- (1/2) * log2(M23Prime/M23)
+
+print(paste("Hurst exponents for GBPEUR:", H1))
+print(paste("Hurst exponents for SEKEUR:", H2))
+print(paste("Hurst exponents for CADEUR:", H3))
+```
+
+Calcul **Volatility**
+
+```{r}
+# Volatility 15 min
+V1 <- sd(X)
+V2 <- sd(X1)
+V3 <- sd(X2)
+
+print(paste("Volatility at 15 min for GBPEUR:", V1))
+print(paste("Volatility at 15 min for SEKEUR:", V2))
+print(paste("Volatility at 15 min for CADEUR:", V3))
+
+# Volatility 1 hour
+V1H <- V1 * 4^H1
+V2H <- V2 * 4^H2
+V3H <- V3 * 4^H3
+
+print(paste("Volatility at 1 hour for GBPEUR:", V1H))
+print(paste("Volatility at 1 hour for SEKEUR:", V2H))
+print(paste("Volatility at 1 hour for CADEUR:", V3H))
+
+# Volatility 1 day
+V1J <- V1H * 24^H1
+V2J <- V2H * 24^H2
+V3J <- V3H * 24^H3
+
+print(paste("Volatility at 1 day for GBPEUR:", V1J))
+print(paste("Volatility at 1 day for SEKEUR:", V2J))
+print(paste("Volatility at 1 day for CADEUR:", V3J))
+
+# Volatility 1 year
+V1A <- V1J * 252^H1
+V2A <- V2J * 252^H2
+V3A <- V3J * 252^H3
+
+print(paste("Volatility at 1 year for GBPEUR:", V1A))
+print(paste("Volatility at 1 year for SEKEUR:", V2A))
+print(paste("Volatility at 1 year for CADEUR:", V3A))
+```
+
+```{r}
+plot(X)
+plot(X1)
+plot(X2)
+```
